@@ -1,2 +1,2 @@
 # osmquadtreeutils
-python and golang utils for github.com/jharris2268/osmquadtree
+python utils for github.com/jharris2268/osmquadtree
