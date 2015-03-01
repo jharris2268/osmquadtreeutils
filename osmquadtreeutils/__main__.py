@@ -1,7 +1,7 @@
 from bottle import route, run, static_file, request, post,response,template,hook
 import bottle
 
-bottle.TEMPLATE_PATH = ['osmquadtreeutils/']
+bottle.TEMPLATE_PATH = ['/home/james/gopath/osmquadtreeutils/static']
 import rendertiles, rendersplit
 import sys,os
 
@@ -128,7 +128,7 @@ if __name__ == "__main__":
     
     tiles=dict((k, {}) for k in mp)
     print tiles
-    staticloc='/home/james/gopath/osmquadtreeutils/'
+    staticloc='/home/james/gopath/osmquadtreeutils/static'
     #idx=open(staticloc+"/index.html").read()
     idxfn = staticloc+'index.html'
     run(host='0.0.0.0', port=8351, debug=True)
