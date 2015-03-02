@@ -6,16 +6,16 @@ import time,sys,os
 ew = 20037508.3428
 tz = 8
 
-def make_mapnik(fn, tabpp = None, sc=None, srs=None, mp=None, avoidEdges=False):
+def make_mapnik(fn, tabpp = None, scale=None, srs=None, mp=None, avoidEdges=False):
     
         
     cc=[l for l in subprocess.check_output(['carto',fn]).split("\n") if not l.startswith('[millstone')]
     
-    if sc!=None:
+    if scale!=None:
         for i,c in enumerate(cc):
             if 'ScaleDenominator' in c:
                 sd=c.strip()[21:-22]
-                nsd=str(int(sd)*sc)
+                nsd=str(int(sd)*scale)
                 #print i,sd,"=>",nsd
                 c.replace(sd, nsd)
                 cc[i]=c
