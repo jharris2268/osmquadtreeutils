@@ -21,5 +21,5 @@ setup(
             ),
         
         
-        ]+cythonize("osmquadtreeutils/readpbf.pyx"),
+        ]+cythonize("osmquadtreeutils/_readpbf.pyx"),
 ) 

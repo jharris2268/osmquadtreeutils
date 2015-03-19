@@ -205,14 +205,42 @@ boost::python::object geometry_tuple(std::shared_ptr<geometryelement> gg) {
 }
 boost::python::object get_geometry(std::shared_ptr<geometryelement> geom);
 
+
+boost::python::list readPbfTags(std::string ss) {
+    size_t pos = 0;
+    PbfTag tg = readPbfTag(ss, pos); 
+    boost::python::list ans;
+    for ( ; tg.get<0>()>0; tg = readPbfTag(ss, pos)) {
+        ans.append(boost::python::make_tuple(
+            tg.get<0>(),tg.get<1>(),tg.get<2>() ));
+    }
+    return ans;
+} 
+
+template <class T>
+boost::python::list asList(const std::vector<T>& in) {
+    boost::python::list ans;
+    for (size_t i=0; i < in.size(); i++) {
+        ans.append(in.at(i));
+    }
+    return ans;
+}
+
+boost::python::list py_readPackedDelta(std::string data) {
+    return asList(readPackedDelta(data));
+}   
+    
+boost::python::list py_readPackedInt(const std::string& data) {
+    return asList(readPackedInt(data));
+}   
+
 using namespace boost::python;
 void init_primitve_block() {
     def("readPrimitiveBlock",&readPrimitiveBlock);
     
-    
-    //to_python_converter<tagvector, tagvector_to_python>();
-    //to_python_converter<refvector, refvector_to_python>();
-    //to_python_converter<memvector, memvector_to_python>();
+    def("readPbfTags", &readPbfTags);
+    def("readPackedDelta",&py_readPackedDelta);
+    def("readPackedDelta",&py_readPackedInt);
     
     class_<primitiveblock, std::shared_ptr<primitiveblock>, boost::noncopyable>("PrimitiveBlock",no_init)
         .def_readwrite("Idx", &primitiveblock::idx)

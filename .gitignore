@@ -2,4 +2,4 @@ build/*
 dist/*
 static/TileLayer.GeoJSON.js
 osmquadtreeutils.egg-info/*
-osmquadtreeutils/readpbf.c
+osmquadtreeutils/_readpbf.c
