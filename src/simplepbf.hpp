@@ -56,15 +56,16 @@ struct tag {
 //typedef std::pair<std::string,std::string> tag;
 
 struct info {
-    info() : version(0),timestamp(0),changeset(0),user_id(0),user("") {}
+    info() : version(0),timestamp(0),changeset(0),user_id(0),user(""),visible(false) {}
     info(int64 vs, int64 ts, int64 cs, int64 ui, std::string us) : 
-        version(vs),timestamp(ts),changeset(cs),user_id(ui),user(us) {}
+        version(vs),timestamp(ts),changeset(cs),user_id(ui),user(us),visible(true) {}
     
     int64 version;
     int64 timestamp;
     int64 changeset;
     int64 user_id;
     std::string user;
+    bool visible;
 };
     
 //typedef boost::tuple<int64,int64,int64,int64,std::string> info;

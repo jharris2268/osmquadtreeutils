@@ -173,7 +173,7 @@ struct memvector_to_python {
 
 boost::python::object info_tuple(const info& inf) {
     return boost::python::make_tuple(
-        inf.version,inf.timestamp,inf.changeset,inf.user_id,inf.user);
+        inf.version,inf.timestamp,inf.changeset,inf.user_id,inf.user,inf.visible);
 }
 
 
@@ -257,6 +257,7 @@ void init_primitve_block() {
         .add_property("Changeset", &info::changeset)
         .add_property("UserId", &info::user_id)
         .add_property("User", &info::user)
+        .add_property("Visible",&info::visible)
         .add_property("tuple", info_tuple)
     ;
     

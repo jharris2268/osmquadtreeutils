@@ -12,7 +12,7 @@ Relation = namedtuple("Relation","Id Info Tags Members Quadtree ChangeType".spli
 Geometry = namedtuple("Geometry","Id Info Tags Geometry Quadtree ChangeType Bbox".split())
 Tag = namedtuple("Tag","Key Value".split())
 Member=namedtuple("Member","Type Ref Role".split())
-Info=namedtuple("Info", "Version Timestamp Changeset Uid User".split())
+Info=namedtuple("Info", "Version Timestamp Changeset Uid User Visible".split())
 
 Point = namedtuple("Point", "Ref Lon Lat".split())
 Linestring = namedtuple("Linestring", "Points ZOrder")
@@ -222,13 +222,14 @@ def readStringTable(ind):
     return st
 
 def readDenseInfo(ind, st):
-    vs,ts,cs,ui,us = None,None,None,None,None
+    vs,ts,cs,ui,us,vv = None,None,None,None,None,None
     for a,b,c in iterPbfTags(ind):
         if a==1: vs = readPackInt(c)
         elif a==2: ts = readPackIntDelta(c)
         elif a==3: cs = readPackIntDelta(c)
         elif a==4: ui = readPackIntDelta(c)
         elif a==5: us = readPackIntDelta(c)
+        elif a==6: vv = readPackInt(c)
     
     if not vs:
         return None
@@ -236,8 +237,8 @@ def readDenseInfo(ind, st):
         raise Exception("??",vs,ts,cs,ui,us)
     
     infs=[]
-    for v,c,t,i,s in zip(vs,ts,cs,ui,us):
-        infs.append(Info(v,c,t,i,st[s]))
+    for ii,(v,c,t,i,s) in enumerate(zip(vs,ts,cs,ui,us)):
+        infs.append(Info(v,c,t,i,st[s],vv[ii] if vv else True))
     return infs
     
     
@@ -432,14 +433,15 @@ def readCommon(ind, st):
     return id_,inf,tags,qt,rem
 
 def readInfo(ind, st):
-    vs,ts,cs,ui,us = None,None,None,None,None
+    vs,ts,cs,ui,us,vv = None,None,None,None,None,True
     for a,b,c in iterPbfTags(ind):
         if a==1: vs = b
         elif a==2: ts = b
         elif a==3: cs = b
         elif a==4: ui = b
         elif a==5: us = st[b]
-    return Info(vs,ts,cs,ui,us)
+        elif a==6: vv = (b!=0)
+    return Info(vs,ts,cs,ui,us,vv if vs else False)
         
     
 
@@ -706,12 +708,12 @@ def timeOp(op,*args,**kwargs):
     return time.time()-st, ans
 
 
-def iterBlocks(fn,isc=False):
+def iterBlocks(fn,isc=False, rpb=readPrimitiveBlock):
     
     for i,(a,b,c) in enumerate(iterFileBlocks(open(fn))):
         if b in ('OSMData','OSMChange'):
             iscc=isc or b=='OSMChange'
-            yield a, readPrimitiveBlock(i,c,iscc)
+            yield a, rpb(i,c,iscc)
         
 
 def iterObjs(fn):
@@ -1103,7 +1105,7 @@ def mergeChange(A,B):
 
 def asNormal(o):
     ty=type(o)
-    aa=list(o)[:1]+[0,]
+    aa=list(o)[:-1]+[0,]
     return ty(*aa)
     
 

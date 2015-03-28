@@ -6,7 +6,7 @@ import time,sys,os
 ew = 20037508.3428
 tz = 8
 
-def make_mapnik(fn, tabpp = None, scale=None, srs=None, mp=None, avoidEdges=False):
+def make_mapnik(fn, tabpp = None, scale=None, srs=None, mp=None, avoidEdges=False, abspath=True):
     
         
     cc=[l for l in subprocess.check_output(['carto',fn]).split("\n") if not l.startswith('[millstone')]
@@ -19,6 +19,23 @@ def make_mapnik(fn, tabpp = None, scale=None, srs=None, mp=None, avoidEdges=Fals
                 #print i,sd,"=>",nsd
                 c.replace(sd, nsd)
                 cc[i]=c
+    
+    bsp=''
+    if abspath:
+        a,b=os.path.split(fn)
+        if a:
+            bsp=a
+            
+        
+            #for i,c in enumerate(cc):
+            #    if 'file' in c:
+            #        if 'file=' in c:
+            #            cc[i] = c.replace('file="','file="'+a+'/')
+            #        elif 'name="file"><![CDATA[' in c:
+            #            cc[i] = c.replace('CDATA[','CDATA['+a+'/')
+            
+                        
+    
     
     if avoidEdges:
         for i,c in enumerate(cc):
@@ -39,7 +56,7 @@ def make_mapnik(fn, tabpp = None, scale=None, srs=None, mp=None, avoidEdges=Fals
     if mp==None:
         mp = mapnik.Map(256*tz,256*tz)        
         
-    mapnik.load_map_from_string(mp,"\n".join(cc))
+    mapnik.load_map_from_string(mp,"\n".join(cc),False,bsp)
     
     if srs!=None:
         mp.srs=srs

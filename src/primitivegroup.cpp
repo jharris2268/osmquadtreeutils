@@ -85,7 +85,7 @@ info readInfo(const std::string& data,const std::vector<std::string>& stringtabl
     uint64 a,b; std::string c;
     boost::tie(a,b,c) = readPbfTag(data,pos);
     
-    
+    bool vv=true;
     
     for ( ; a>0; boost::tie(a,b,c) = readPbfTag(data,pos)) {
         if (a==1) { ans.version = int64(b); }
@@ -93,6 +93,11 @@ info readInfo(const std::string& data,const std::vector<std::string>& stringtabl
         else if (a==3) { ans.changeset = int64(b); }
         else if (a==4) { ans.user_id = int64(b); }
         else if (a==5) { ans.user = stringtable.at(b); }
+        else if (a==6) { vv = b!=0; }
+        
+    }
+    if (ans.version!=0) {
+        ans.visible=vv;
     }
     return ans;
     /*
@@ -190,11 +195,11 @@ std::shared_ptr<element> readNode(
     return boost::python::object(boost::python::make_tuple(0,id,info,tags,lonlat,qt,ct));*/
 }
     
-boost::tuple<std::vector<uint64>,std::vector<int64>,std::vector<int64>,std::vector<int64>,std::vector<int64> >
+boost::tuple<std::vector<uint64>,std::vector<int64>,std::vector<int64>,std::vector<int64>,std::vector<int64>,std::vector<uint64> >
     readDenseInfo(const std::string& data)
 {
     std::vector<int64> ts,cs,ui,us;
-    std::vector<uint64> vs;
+    std::vector<uint64> vs, vv;
     
     uint64 a,b; std::string c;
     size_t pos = 0;
@@ -206,8 +211,9 @@ boost::tuple<std::vector<uint64>,std::vector<int64>,std::vector<int64>,std::vect
         if (a==3) { cs = readPackedDelta(c); }
         if (a==4) { ui = readPackedDelta(c); }
         if (a==5) { us = readPackedDelta(c); }
+        if (a==6) { vv = readPackedInt(c); }
     }
-    return boost::make_tuple(vs,ts,cs,ui,us);
+    return boost::make_tuple(vs,ts,cs,ui,us,vv);
 }
     
     
@@ -219,7 +225,7 @@ int readDenseNodes(
     std::vector<uint64> kvs;
     
     std::vector<int64> ts,cs,ui,us;
-    std::vector<uint64> vs;
+    std::vector<uint64> vs,vv;
     
     uint64 a,b; std::string c;
     size_t pos = 0;
@@ -227,7 +233,7 @@ int readDenseNodes(
     
     for ( ; a>0; boost::tie(a,b,c) = readPbfTag(data,pos)) {
         if (a==1) { ids = readPackedDelta(c); }
-        else if (a==5) { boost::tie(vs,ts,cs,ui,us) = readDenseInfo(c); }
+        else if (a==5) { boost::tie(vs,ts,cs,ui,us,vv) = readDenseInfo(c); }
         else if (a==8) { lats = readPackedDelta(c); }
         else if (a==9) { lons = readPackedDelta(c); }
         else if (a==10) { kvs = readPackedInt(c); }
@@ -249,6 +255,9 @@ int readDenseNodes(
                 ui.at(i),
                 stringtable.at(us.at(i))
             );
+            if (vv.size()>0) {
+                inf.visible = vv.at(i)!=0;
+            }
         }
         if (tagi < kvs.size()) {
             //boost::python::list tt;
