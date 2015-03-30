@@ -21,11 +21,16 @@
         var osmAttrib='Map data © <a href="http://openstreetmap.org">OpenStreetMap</a> contributors';
         var osm = new L.TileLayer(osmUrl, {maxZoom: 18, attribution: osmAttrib});		
 
+        %if hasOrig:
+        
         var orig = L.tileLayer('tile/orig/{z}/{x}/{y}.png', {
 			maxZoom: 18,
 			attribution: 'local tiles',
 			
 		});
+        
+        %end
+        
         var alt = L.tileLayer('tile/alt/{z}/{x}/{y}.png', {
             minZoom: 10,
 			maxZoom: 18,
@@ -33,13 +38,17 @@
 			
 		});
         
+        
+        var spt_other = {};
+        
+        %if hasSplit:
         var spt = L.tileLayer('tile/split_BASE/{z}/{x}/{y}.png', {
             minZoom: 10,
 			maxZoom: 18,
 			attribution: 'local tiles',
 			
 		});
-        var spt_other = {};
+        
         var kk = "LAND BUILD TRANS LABEL ADMIN ROADNAME".split(" ");
         for (var i in kk) {
             var k = kk[i];
@@ -47,7 +56,7 @@
                 minZoom: 10, maxZoom: 18,attribution: 'local tiles'
             });
         }
-        
+        %end
         
         var map = L.map('map', {center: [{{lt}}, {{ln}}], zoom: 15, layers: [osm]});//.setView([51.505, -0.09], 13);
         
@@ -153,7 +162,7 @@
     
     
     
-    L.control.layers({"osm":osm,{{!"'orig':orig," if hasOrig else ""}}"alt": alt, "split":spt}, oo).addTo(map);
+    L.control.layers({"osm":osm,{{!"'orig':orig," if hasOrig else ""}}"alt": alt {{! ", 'split':spt" if hasSplit else ""}} }, oo).addTo(map);
     
     
         

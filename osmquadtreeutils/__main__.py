@@ -7,6 +7,7 @@ import sys,os
 
 import urllib,json
 import postds as ps
+import argparse
 
 smalls=[]
 def find_small(v):
@@ -88,8 +89,11 @@ def fetchindex():
         lon=request.query['lon']
     print "fetchindex",lat,lon
     response.content_type = "text/html"
+    global mp
+    hasOrig = 'orig' in mp
+    hasSplit= 'split_BASE' in mp
     #return idx % (lat,lon)
-    return template('index',ln=lon,lt=lat,hasOrig=True)
+    return template('index',ln=lon,lt=lat,hasOrig=hasOrig,hasSplit=hasSplit)
     #return static_file("index.html",root=staticloc)
 
 #@route('/setloc')
@@ -109,26 +113,65 @@ def server_js(filename):
 
 
 if __name__ == "__main__":
-    root='/home/james/map_data/openstreetmap-carto'
-    fnalt='project-oqt.mml'
+    mml='project-oqt.mml'
     
-    grps=rendersplit.load_groups(os.path.join(root,fnalt[:-4]+'-tabs.csv'))
+    parser = argparse.ArgumentParser(description="setup demo mapnik tileserver")
+    parser.add_argument("-s","--mapstyle",help="map style (mml) file",default=mml)
+    parser.add_argument("-o","--origstyle",help="orig style (mml) file",default="")
+    parser.add_argument("-t", "--origtableprefix",help="orig table prefix",default="")
+    parser.add_argument("-p", "--split", action="store_true",help="split map style file",default=False)
+    parser.add_argument("-l", "--staticloc",help="split map style file",default="osmquadtreeutils/static/")
+    args = parser.parse_args()
     
-    mpa = rendertiles.make_mapnik(os.path.join(root,fnalt), avoidEdges=True)
+    orig = None
+    if args.mapstyle:
+        mml = args.mapstyle
     
-    mp = {
-        'orig': rendertiles.make_mapnik(os.path.join(root,'project.mml'),tabpp='se_eng_20150211'),
-        'alt': mpa
-    }
+    if not os.path.exists(mml):
+        print "'%s' doesn not exist: specify -s for style file" % mml
+        sys.exit(1)
+        
+    if args.origstyle:
+        orig = args.origstyle
+    else:
+        root,_ = os.path.split(mml)
+        orig = os.path.join(root, 'project.mml')
+        if not os.path.exists(orig):
+            orig=None
+    
+    grps=None
+    if args.split:
+        fn=mml[:-4]+'-tabs.csv'
+        if not os.path.exists(fn):
+            print "split file %s does not exist" % fn
+            sys.exit(1)
+        grps=rendersplit.load_groups(fn)
+        
+    
+    print "map style:  %s" % mml
+    print "orig style: %s" % (orig if orig else 'MISSING')
+    print "groups?     %s" % ('yes' if grps else 'no')
+    print "orig tabpp: %s" % (args.origtableprefix if args.origtableprefix else 'MISSING')
     
     
-    for k in set(a for a,b in grps):
-        mp['split_'+k] = (mpa, grps)
-        #tiles['split_'+k] = {}
+    
+    mpa = rendertiles.make_mapnik(mml, avoidEdges=True)
+    
+    mp = {'alt': mpa }
+    if orig and os.path.exists(orig):
+        if args.origtableprefix:
+            mp['orig'] = rendertiles.make_mapnik(orig,tabpp=args.origtableprefix)
+        else:
+            mp['orig'] = rendertiles.make_mapnik(orig)
+    
+    if grps:
+        for k in set(a for a,b in grps):
+            mp['split_'+k] = (mpa, grps)
+            #tiles['split_'+k] = {}
     
     tiles=dict((k, {}) for k in mp)
-    print tiles
-    staticloc='/home/james/gopath/osmquadtreeutils/static'
+    print tiles, mp
+    staticloc=args.staticloc
     #idx=open(staticloc+"/index.html").read()
     idxfn = staticloc+'index.html'
     run(host='0.0.0.0', port=8351, debug=True)
