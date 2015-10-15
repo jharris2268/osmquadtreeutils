@@ -29,8 +29,13 @@ def load_groups(fn):
     print res
     return res
 
-def render_all(mp, grps):
-    w,h = mp.width,mp.height
+def render_im_split(mp, grps, bx, w, h=None,scale_factor=1.):
+    if h==None:
+        h=w
+    mp.resize(w,h)    
+    mp.zoom_to_box(bx)
+    
+    #w,h = mp.width,mp.height
     mc = mp.background
     
     mp.background = mapnik.Color(0,0,0,0)
@@ -49,7 +54,7 @@ def render_all(mp, grps):
         im = mapnik.Image(w,h)
         
         set_layers(mp, b)
-        mapnik.render_with_detector(mp, im, detector)
+        mapnik.render_with_detector(mp, im, detector,scale_factor)
         pim = topil(im)
         
         if a not in imgs:
@@ -61,21 +66,22 @@ def render_all(mp, grps):
     
     return imgs
         
-def render_tile_split(mp, grps, z, x, y):
+def render_tile_split(mp, grps, z, x, y, tzp=None,scale_factor=1):
     st=time.time()
-    tzp = 1
-    if z==13: tzp=2
-    if z==14: tzp=4
-    if z>=15: tzp=8
-    #tzp = tz if z>10 else 1
+    if tzp==None:
+        tzp = 1
+        if z==13: tzp=2
+        if z==14: tzp=4
+        if z>=15: tzp=8
+        #tzp = tz if z>10 else 1
     
     xx,yy,mm,bx=rt.tilebound(z,x,y,tzp)
     print mm,
     sys.stdout.flush()
-    mp.resize(tzp*256, tzp*256)
-    mp.buffer_size = 256
-    mp.zoom_to_box(bx)
-    pims = render_all(mp,grps)
+    #mp.resize(tzp*256, tzp*256)
+    #mp.buffer_size = 256
+    #mp.zoom_to_box(bx)
+    pims = render_im_split(mp,grps,bx,tzp*256*scale_factor,tzp*256*scale_factor,scale_factor)
     print "%-8.1fs" % (time.time()-st,)
     
     for k,v in pims.iteritems():

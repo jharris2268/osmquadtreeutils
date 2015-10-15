@@ -75,7 +75,7 @@ def enable_cors():
 @route('/roads/<z>/<x>/<y>.json')
 def getRoads(z,x,y):
     response.content_type='application/json'
-    jj=json.loads(ps.getGeojsonTile(-1,roadsquery, x,y,z))
+    jj=json.loads(ps.getTile(-1,roadsquery, tup=(x,y,z,)))
     jj.pop('properties')
     return jj
 

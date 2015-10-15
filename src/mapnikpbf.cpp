@@ -1,5 +1,6 @@
 #include <mapnik/featureset.hpp>
 #include <mapnik/feature.hpp>
+#include <mapnik/geometry.hpp>
 #include <mapnik/feature_factory.hpp>
 #include <mapnik/value_types.hpp>
 #include <mapnik/unicode.hpp>
@@ -48,7 +49,9 @@ xy get_point(point pt, bool reproj) {
     
 
 int add_point_geom(mapnik::feature_ptr fs, std::shared_ptr<pointgeometry> pt, bool reproj) {
-    auto gg = std::make_unique<mapnik::geometry_type>(mapnik::geometry_type::types::Point);
+    
+    
+    /*auto gg = std::make_unique<mapnik::geometry_type>(mapnik::geometry_type::types::Point);
     
     xy p0 = get_point(pt->Point(), reproj);
     
@@ -57,24 +60,32 @@ int add_point_geom(mapnik::feature_ptr fs, std::shared_ptr<pointgeometry> pt, bo
     fs->add_geometry(gg.release());
     
     
+    return 1;*/
+    
+    xy p0 = get_point(pt->Point(), reproj);
+    fs->set_geometry(mapnik::geometry::geometry<double>(mapnik::geometry::point<double>(p0.x,p0.y)));
     return 1;
 }
 
 int add_line_geom(mapnik::feature_ptr fs, std::shared_ptr<linegeometry> ln, bool reproj) {
-    auto gg = std::make_unique<mapnik::geometry_type>(mapnik::geometry_type::types::LineString);
+    //auto gg = std::make_unique<mapnik::geometry_type>(mapnik::geometry_type::types::LineString);
+    mapnik::geometry::line_string<double> ls;
+    ls.reserve(ln->NumPoints());
     
     for (int i=0; i < ln->NumPoints(); i++) {
     
         xy p = get_point(ln->Point(i), reproj);
-        if (i==0) {
+        ls.add_coord(p.x,p.y);
+        /*if (i==0) {
             gg->move_to(p.x, p.y);
         } else {
             gg->line_to(p.x, p.y);
-        }
+        }*/
     
     }
     
-    fs->add_geometry(gg.release());
+    //fs->add_geometry(gg.release());
+    fs->set_geometry(mapnik::geometry::geometry<double>(ls));
     
     
     return 1;
@@ -82,23 +93,33 @@ int add_line_geom(mapnik::feature_ptr fs, std::shared_ptr<linegeometry> ln, bool
 
 
 int add_polygon_geom(mapnik::feature_ptr fs, std::shared_ptr<polygongeometry> py, bool reproj) {
-    auto gg = std::make_unique<mapnik::geometry_type>(mapnik::geometry_type::types::Polygon);
+    //auto gg = std::make_unique<mapnik::geometry_type>(mapnik::geometry_type::types::Polygon);
+    mapnik::geometry::polygon<double> poly;
+    
     
     for (int i=0; i < py->NumRings(); i++) {
-        
+        mapnik::geometry::line_string<double> ls;
+        ls.reserve(py->NumPoints(i));
         for (int j=0; j < py->NumPoints(i); j++) {
             xy p = get_point(py->Point(i,j), reproj);
-            if (j==0) {
+            ls.add_coord(p.x,p.y);
+            /*if (j==0) {
                 gg->move_to(p.x, p.y);
             } else {
                 gg->line_to(p.x, p.y);
-            }
+            }*/
             
         }
-        gg->close_path();
+        if (i==0 ) {
+            poly.set_exterior_ring(mapnik::geometry::linear_ring<double>(ls));
+        } else {
+            poly.add_hole(mapnik::geometry::linear_ring<double>(ls));
+        }
+        //gg->close_path();
     }
     
-    fs->add_geometry(gg.release());
+    //fs->add_geometry(gg.release());
+    fs->set_geometry(mapnik::geometry::geometry<double>(poly));
     
     
     return 1;
@@ -108,27 +129,41 @@ int add_polygon_geom(mapnik::feature_ptr fs, std::shared_ptr<polygongeometry> py
 int add_multi_geom(mapnik::feature_ptr fs, std::shared_ptr<multigeometry> mg, bool reproj) {
     
     int cc = 0;
+    
+    mapnik::geometry::geometry_collection<double> gc;
+    
     for (int i=0; i < mg->NumGeometries(); i++) {
-        auto gg = std::make_unique<mapnik::geometry_type>(mapnik::geometry_type::types::Polygon);
+        
+        
+        //auto gg = std::make_unique<mapnik::geometry_type>(mapnik::geometry_type::types::Polygon);
+        mapnik::geometry::polygon<double> py;
         for (int j=0; j < mg->NumRings(i); j++) {
-            
+            mapnik::geometry::line_string<double> ls;
+            ls.reserve(mg->NumPoints(i,j));
             for (int k=0; k < mg->NumPoints(i,j); k++) {
+                
                 xy p = get_point(mg->Point(i,j,k), reproj);
-                if (k==0) {
+                ls.add_coord(p.x,p.y);
+                /*if (k==0) {
                     gg->move_to(p.x, p.y);
                 } else {
                     gg->line_to(p.x, p.y);
-                }
+                }*/
                 
             }
-            gg->close_path();
+            //gg->close_path();
+            if (j==0) {
+                py.set_exterior_ring(mapnik::geometry::linear_ring<double>(ls));
+            } else {
+                py.add_hole(mapnik::geometry::linear_ring<double>(ls));
+            }
         }
-        fs->add_geometry(gg.release());
+        //fs->add_geometry(gg.release());
+        gc.push_back(py);
         cc++;
     }
     
-    
-    
+    fs->set_geometry(gc);
     
     return cc;
 }
@@ -189,7 +224,7 @@ mapnik::value_double get_double_value(const std::string& c) {
 
 boost::tuple<size_t,std::string,std::string> get_tag(const tagvector& tg, int i) {
     if (tg[i].key.size() == 0) {
-        std::cout << "NULL KEY" << std::endl;
+        std::cout << "NULL KEY " << i << " " << tg[i].val << std::endl;
         return boost::make_tuple(0,tg[i].key,tg[i].val);
     }
     char t = tg[i].key[0];

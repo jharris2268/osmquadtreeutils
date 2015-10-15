@@ -22,4 +22,5 @@ setup(
         
         
         ]+cythonize("osmquadtreeutils/_readpbf.pyx"),
+    zip_safe=False
 ) 

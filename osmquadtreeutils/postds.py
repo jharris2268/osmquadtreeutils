@@ -34,7 +34,7 @@ usePG=False
 
 #usePG=True
 
-def make_query(idx,table,query,aspbf=False):
+def make_query(idx,table,query,aspbf=False, latlon=True):
     t=table.strip()
     
     resx,resy = query.resolution
@@ -54,6 +54,7 @@ def make_query(idx,table,query,aspbf=False):
     data['maxx'] = query.bbox.maxx
     data['maxy'] = query.bbox.maxy
     data['idx'] = idx
+    data['latlon'] = latlon
     dataenc=urllib.urlencode(data)
     req = urllib2.Request('http://localhost:17831/query',dataenc)
     
@@ -119,21 +120,42 @@ def get_response(idx,table,query):
 
 
 
-def getGeojsonTile(idx,query,x,y,z):
-    data = {'response':'geojson','idx':0}
-    data['query'] = query
+def getTile(idx,query,tup=None,bbox=None,qt=None,latlon=True, resp='geojson',returnNull=False):
+    data = {}
+    data['response'] = resp
     data['idx'] = idx
+    data['query'] = query
     
-    data['tilex']=x
-    data['tiley']=y
-    data['tilez']=z
-    data['latlon']=True
+    
+    if tup:
+        data['tilex']=tup[0]
+        data['tiley']=tup[1]
+        data['tilez']=tup[2]
+    elif bbox:
+        a,b,c,d = bbox
+        data['minlon']=a
+        data['minlat']=b
+        data['maxlon']=c
+        data['maxlat']=d
+    elif qt!=None:
+        try:
+            qti=int(qt)
+            qt=rp.quadTreeString(qti)
+        except:
+            pass
+        if qt=='':
+            qt='ZERO'
+        data['quadtree'] = qt
+        
+    data['latlon']=latlon
+    if returnNull:
+        data['returnnull']='true'
     
     dataenc=urllib.urlencode(data)
     req = urllib2.Request('http://localhost:17831/query',dataenc)
     
     return urllib2.urlopen(req).read()
-    
+
 
 class PostDS(mapnik.PythonDatasource):
     def __init__(self, **kwargs):
@@ -169,3 +191,4 @@ class PostDS(mapnik.PythonDatasource):
             print ex
             return mapnik.PythonDatasource.wkb_features(keys=tuple(),features=tuple())
 
+tiles = lambda: json.load(urllib2.urlopen('http://localhost:17831/tiles'))

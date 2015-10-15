@@ -1,29 +1,164 @@
 import struct,cStringIO as StringIO,zlib
 from collections import namedtuple
 import time
-import json,gzip,base64,math,os
+import json,gzip,base64,math,os,sys
 import mapnik
 #import hello
+def trim(s, l):
+    if len(s)<l: return s
+    if s.endswith(')'):
+        return s[:(l-4)] + '...)'
+    return s[:(l-3)]+'...'
+        
+class Base:
+    type=''
+    fields=[]
+    def __init__(self, *args):
+        for f,a in zip(self.fields,args):
+            setattr(self,f,a)
+    
+    def __len__(self):
+        return len(self.fields)
+    
+    def __getitem__(self, i):
+        return getattr(self, self.fields[i])
+    
+    def __repr__(self):
+        return "%s(%s)" % (self.type, ", ".join(trim(repr(p),40) for p in self))
 
-PrimitiveBlock = namedtuple("PrimitiveBlock","Idx Quadtree StartDate EndDate Objects Tags".split())
-Node = namedtuple("Node","Id Info Tags Lon Lat Quadtree ChangeType".split())
-Way = namedtuple("Way","Id Info Tags Nodes Quadtree ChangeType".split())
-Relation = namedtuple("Relation","Id Info Tags Members Quadtree ChangeType".split())
-Geometry = namedtuple("Geometry","Id Info Tags Geometry Quadtree ChangeType Bbox".split())
-Tag = namedtuple("Tag","Key Value".split())
-Member=namedtuple("Member","Type Ref Role".split())
-Info=namedtuple("Info", "Version Timestamp Changeset Uid User Visible".split())
+#PrimitiveBlock = namedtuple("PrimitiveBlock","Idx Quadtree StartDate EndDate Objects Tags".split())
+#Node = namedtuple("Node","Id Info Tags Lon Lat Quadtree ChangeType".split())
+#Way = namedtuple("Way","Id Info Tags Nodes Quadtree ChangeType".split())
+#Relation = namedtuple("Relation","Id Info Tags Members Quadtree ChangeType".split())
+#Geometry = namedtuple("Geometry","Id Info Tags Geometry Quadtree ChangeType Bbox".split())
+class PrimitiveBlock(Base):
+    type="PrimitiveBlock"
+    fields="Idx Quadtree StartDate EndDate Objects Tags".split()
+class Node(Base):
+    type="Base"
+    fields="Id Info Tags Lon Lat Quadtree ChangeType".split()
+class Way(Base):
+    type="Way"
+    fields="Id Info Tags Nodes Quadtree ChangeType".split()
+class Relation(Base):
+    type="Relation"
+    fields="Id Info Tags Members Quadtree ChangeType".split()
 
-Point = namedtuple("Point", "Ref Lon Lat".split())
-Linestring = namedtuple("Linestring", "Points ZOrder")
-Polygon = namedtuple("Polygon", "Rings ZOrder Area")
-MultiGeometry = namedtuple("MultiGeometry", "Geoms ZOrder Area")
-BBox = namedtuple("BBox", "Minx Miny Maxx Maxy")
+
+class Geometry(Base):
+    type="Geometry"
+    fields="Id Info Tags Geometry Quadtree ChangeType Bbox".split()
+    
+    def toJson(self, i, asMerc=False):
+        ans = {'id': i}
+        tgs = dict((t.Key,t.Value) for t in self.Tags)
+        if not 'osm_id' in tgs:
+            tgs['osm_id'] = self.Id
+        if not 'quadtree' in tgs:
+            tgs['quadtree'] = quadTreeString(self.Quadtree)
+        ans['properties'] = tgs
+        ans['bbox'] = list(self.Bbox)
+        ans['geometry'] = self.Geometry.toJson(asMerc)
+        return ans
+
+#Tag = namedtuple("Tag","Key Value".split())
+#Member=namedtuple("Member","Type Ref Role".split())
+#Info=namedtuple("Info", "Version Timestamp Changeset Uid User Visible".split())
+class Tag(Base):
+    type="Tag"
+    fields=["Key","Value"]
+    def fix(self):
+        if self.Key[0] == '$':
+            self.Key[0]=self.Key[1:]
+            self.Value = None
+        
+        elif self.Key[0] == '^':
+            self.Key[0]=self.Key[1:]
+            self.Value = unzigzag(readUInt(self.Value))
+        elif self.Key[0] == '%':
+            self.Key[0]=self.Key[1:]
+            self.Value = itof(readUInt(self.Value))
+    
+class Member(Base):
+    type="Member",
+    fields=["Type", "Ref", "Role"]
+    
+class Info(Base):
+    type="Info"
+    fields="Version Timestamp Changeset Uid User Visible".split()
+    
+
+#Point = namedtuple("Point", "Ref Lon Lat".split())
+#Linestring = namedtuple("Linestring", "Points ZOrder")
+#Polygon = namedtuple("Polygon", "Rings ZOrder Area")
+#MultiGeometry = namedtuple("MultiGeometry", "Geoms ZOrder Area")
+
+mkpt=lambda pt, asm: (Mercator if asm else lambda x,y: [x,y])(pt.Lon*0.0000001,pt.Lat*0.0000001)
+
+class Point(Base):
+    type='Point'
+    fields=['Ref','Lon','Lat']
+    def toJson(self,asmerc=False):
+        return {'type':'Point', 'coordinates': mkpt(self,asmerc)}
+        
+ptlist=lambda pp, asm: [mkpt(p,asm) for p in pp]
+class Linestring(Base):
+    type='Linestring'
+    fields=['Points','ZOrder']
+    def toJson(self,asmerc=False):
+        return {'type':'Linestring', 'coordinates': ptlist(self.Points,asmerc), 'zorder':self.ZOrder}
+    
+    
+class Polygon(Base):
+    type='Polygon'
+    fields=['Rings','ZOrder','Area']
+    def toJson(self,asmerc=False):
+        return {'type':'Polygon', 'coordinates': [ptlist(r,asmerc) for r in self.Rings], 'zorder':self.ZOrder, 'area': self.Area}
+
+class MultiGeometry(Base):
+    type='MultiGeometry'
+    fields=['Geoms','ZOrder','Area']
+    def toJson(self,asmerc=False):
+        return {'type':'MultiGeometry', 'geometries': [g.toJson(asmerc) for g in self.Geoms], 'zorder':self.ZOrder, 'area': self.Area}
+    
+class BBox:
+    type="Bbox"
+    fields= "Minx Miny Maxx Maxy".split()
+
+blockToGeoJSON = lambda b, asm=False: json.dumps({'type':'FeatureCollection','tile':quadTreeString(b.Quadtree),'features':[o.toJson(i,asm) for i,o in enumerate(b.Objects)]})
+
+def progIter(itr, sp, func, mxx=None):
+    for i,bl in enumerate(itr):
+        if (i%sp)==1:
+            t=''
+            if mxx:
+                t="%5.1f%%" % (100.*i/mxx)
+            print "\r%4d%s: %s" % (i,t,func(i,bl)),
+            sys.stdout.flush()
+        yield bl
 
 def quadTreeString(qt):
     if qt==None: return "NONE"
     if qt<0: return "NONE"
     return ''.join('ABCD'[(qt>>(61-2*i))&3] for i in range(qt&31))
+
+def quadTreeXyz(qt):
+    if qt==0:
+        return 0,0,0
+    x,y,z = 0,0,qt&31
+    for i in xrange(z):
+        x*=2
+        y*=2
+        s = (qt>>(61-2*i))&3
+        if s in (1,3):
+            x+=1
+        if s in (2,3):
+            y+=1
+    
+    #t=(1<<(z-1))
+    #return x,t-y,z
+    return x,y,z
+
     
 boxString = lambda bx: "[%s]" % ", ".join("% 10.5f" %f for f in bx)
 intersects=lambda a,b: not (a[0]>b[2] or a[1]>b[3] or a[2]<b[0] or a[3]<b[1])
@@ -145,6 +280,20 @@ def RU(bs):
         x += ( (b&0x7f) << s)
         s += 7
 
+def readUInt(st):
+    x,s=0,0
+   
+    for i,nc in enumerate(st):
+        b=ord(nc)
+        if b < 0x80:
+            if (i>11) or ( (i==11) and (b>1)):
+                return x
+            return (x | (b<<s))
+        x += ( (b&0x7f) << s)
+        s += 7
+def itof(i):
+    return struct.unpack('>d',struct.pack('>Q',i))[0]
+
 def RV(bs):
     return unzigzag(RU(bs))
 
@@ -155,7 +304,9 @@ def unzigzag(ux):
     if ux&1 != 0:
         x = ~x
     return x
-    
+
+def zigzag(x):
+    return (x << 1) ^ (x >> 63)
 
 def iterPbfTags(ind):
     inp = StringIO.StringIO(ind)
@@ -327,8 +478,15 @@ def getGeomBbox(ind):
         bx=geometryBoxInt(readGeom(list(iterPbfTags(ind)),None)[0])
     return gt,bx
 
+def fixGeomTags(tgs):
+    for i,(k,v) in enumerate(tgs):
+        if k[0] == '$': tgs[i]=Tag(k[1:],None)
+        elif k[0] == '^': tgs[i]=Tag(k[1:],unzigzag(readUInt(v)))
+        elif k[0] == '%': tgs[i]=Tag(k[1:],itof(readUInt(v)))
+
 def readGeometry(c,st,ct,filt=None):
     id_,inf,tags,qt,rem = readCommon(c,st)
+    fixGeomTags(tags)
     geo,bx = readGeom(rem,filt)
     if geo==None:
         return None
@@ -399,15 +557,16 @@ def boundsBounds(bnds,ii=False):
         if bb[3]>d: d=bb[3]
     return a,b,c,d
 def geometryBoxInt(geom):
-    if type(geom) == Point:
+    #if type(geom) == Point:
+    if geom.type == 'Point':
         return geom.Lon, geom.Lat, geom.Lon, geom.Lat
-    elif type(geom) == Linestring:
+    elif geom.type == 'Linestring':
         return pointsBounds(geom.Points)
-    elif type(geom) == Polygon:
+    elif geom.type == 'Polygon':
         return pointsBounds(geom.Rings[0])
-    elif type(geom) == MultiGeometry:
+    elif geom.type == 'MultiGeometry':
         return boundsBounds(map(geometryBoxInt,geom.Geoms),True)
-    raise Exception("WTF:"+type(geom))
+    raise Exception("WTF:"+geom.type)
 
 def geometryBox(geom):
     return boxToFloat(geometryBoxInt(geom))
@@ -425,6 +584,7 @@ def readCommon(ind, st):
         elif a==3: vv = [st[i] for i in readPackInt(c)]
         elif a==4: inf = readInfo(c,st)
         elif a==20: qt=unzigzag(b)
+        elif a==21: qt=readQuadtree(c)
         else: rem.append((a,b,c))
     
     tags=[]
@@ -448,6 +608,7 @@ def readInfo(ind, st):
 
 def readDense(ind, st,ct):
     ids,inf,kv,ln,lt,qt = None,None,None,None,None,None
+    qx,qy,qz=None,None,None
     for a,b,c in iterPbfTags(ind):
         if a==1: ids = readPackIntDelta(c)
         if a==5: inf = readDenseInfo(c,st)
@@ -455,6 +616,9 @@ def readDense(ind, st,ct):
         if a==9: ln = readPackIntDelta(c)
         if a==10: kv = readPackInt(c)
         if a==20: qt = readPackIntDelta(c)
+        if a==21: qx = readPackIntDelta(c)
+        if a==22: qy = readPackIntDelta(c)
+        if a==23: qz = readPackIntDelta(c)
     
     tags=[]
     if kv:
@@ -468,6 +632,8 @@ def readDense(ind, st,ct):
             tags.append(tt)
         
     objs=[]
+    if qx and not qt:
+        qt = [xyzToQuadTree(x,y,z) for x,y,z in zip(qx,qy,qz)]
     for i,id_ in enumerate(ids):
         objs.append(Node(\
             id_,
@@ -697,7 +863,7 @@ def getHeaderBlock(fn):
     return None
 
 def readBlockAt(fn, idxitem,idx=0,filt=None):
-    f=open(fn)
+    f=fn if hasattr(fn,'seek') else open(fn)
     f.seek(idxitem[3])
     a,b=readFileBlock(f)
     return readPrimitiveBlock(idx,b,idxitem[1],filt)
@@ -859,7 +1025,7 @@ def filterObjs(bl, box):
         
         
 
-def readBlocksFilter(fn,box=None,filtObjs=False,printConts=False,outFunc=None):
+def iterBlocksFilter(fn,box=None,filtObjs=False,printConts=False,outFunc=None):
     
     
     if printConts:
@@ -869,8 +1035,10 @@ def readBlocksFilter(fn,box=None,filtObjs=False,printConts=False,outFunc=None):
         if box==None:
             for a,bl in iterBlocks(fn):
                 if printConts:
-                    print (blockStrGeom if filtObjs else blockStr)(bl)
+                    print "\r%s" % (blockStrGeom if filtObjs else blockStr)(bl),
+                    sys.stdout.flush()
                 yield bl
+            print
         else :
             idx=getHeaderBlock(fn)
             if not idx:
@@ -883,8 +1051,11 @@ def readBlocksFilter(fn,box=None,filtObjs=False,printConts=False,outFunc=None):
                     
                     if bl.Objects:
                         if printConts:
-                            print (blockStrGeom if filtObjs else blockStr)(bl)
+                            print "\r%s" % (blockStrGeom if filtObjs else blockStr)(bl),
+                            sys.stdout.flush()
                         yield bl
+            print
+            
     if not outFunc:
         return _()
     return outFunc(_())
@@ -918,7 +1089,7 @@ def merc(y):
 earth_half_circum = 20037508.3428
 
 def Mercator(ln, lt):
-    return ln * earth_half_circum / 180.0, merc(lt) * earth_half_circum / 90.0
+    return [ln * earth_half_circum / 180.0, merc(lt) * earth_half_circum / 90.0]
 
 def drop_repeats(pp):
     lp = None

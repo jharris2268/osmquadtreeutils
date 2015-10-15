@@ -16,9 +16,11 @@ def make_mapnik(fn, tabpp = None, scale=None, srs=None, mp=None, avoidEdges=Fals
             if 'ScaleDenominator' in c:
                 sd=c.strip()[21:-22]
                 nsd=str(int(sd)*scale)
-                #print i,sd,"=>",nsd
-                c.replace(sd, nsd)
+                #print i,sd,"=>",nsd,
+                c=c.replace(sd, nsd)
+                #print c
                 cc[i]=c
+    
     
     bsp=''
     if abspath:
@@ -73,12 +75,14 @@ def tilebound(z,x,y,tzp):
     mm = "%d %d %d {%d %d %d %f} => %s" % (z,x,y,zz,xx,yy,ss,bx)
     return xx,yy,mm,bx
 
-def render_im(mp,bx,tilesize):
-    mp.resize(tilesize,tilesize)
+def render_im(mp,bx,width,height=None, scale_factor=1.0, buffer_size=256):
+    if height==None:
+        height=width
+    mp.resize(width,height)
     mp.zoom_to_box(bx)
-    mp.buffer_size = 256
+    mp.buffer_size = buffer_size
     im=mapnik.Image(mp.width,mp.height)
-    mapnik.render(mp,im)
+    mapnik.render(mp,im, scale_factor)
     return PIL.Image.frombytes('RGBA',(mp.width,mp.height),im.tostring())
 
 def render_tile(mp,z,x,y):
@@ -97,14 +101,14 @@ def render_tile(mp,z,x,y):
     
     return iter_subtiles(pim,xx,yy,z,tzp)
     
-def iter_subtiles(pim, xx,yy,z,tzp):
+def iter_subtiles(pim, xx,yy,z,tzp,ts=256):
     
     
     for i in xrange(tzp):
         for j in xrange(tzp):
             xp = xx*tzp+i
             yp = yy*tzp+j
-            pp = pim.crop([i*256,j*256,(i+1)*256,(j+1)*256])
+            pp = pim.crop([i*ts,j*ts,(i+1)*ts,(j+1)*ts])
             #return pim.tostring('png')
             ss=StringIO.StringIO()
             pp.save(ss,format='PNG')
