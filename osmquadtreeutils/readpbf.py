@@ -21,10 +21,20 @@ class Base:
         return len(self.fields)
     
     def __getitem__(self, i):
+        if not hasattr(self, self.fields[i]):
+            return None
         return getattr(self, self.fields[i])
     
     def __repr__(self):
         return "%s(%s)" % (self.type, ", ".join(trim(repr(p),40) for p in self))
+    
+    def __eq__(self,other):
+        if type(self) is type(other):
+            return self.__dict__ == other.__dict__
+        return False
+    def __ne__(self, other):
+        return not self.__eq__(other)
+    
 
 #PrimitiveBlock = namedtuple("PrimitiveBlock","Idx Quadtree StartDate EndDate Objects Tags".split())
 #Node = namedtuple("Node","Id Info Tags Lon Lat Quadtree ChangeType".split())
@@ -34,16 +44,28 @@ class Base:
 class PrimitiveBlock(Base):
     type="PrimitiveBlock"
     fields="Idx Quadtree StartDate EndDate Objects Tags".split()
+    
 class Node(Base):
-    type="Base"
+    type="Node"
     fields="Id Info Tags Lon Lat Quadtree ChangeType".split()
+    @property
+    def key(self):
+        return (0,self.Id,self.Info.Version if self.Info else 0, self.ChangeType)
+    
 class Way(Base):
     type="Way"
     fields="Id Info Tags Nodes Quadtree ChangeType".split()
+    
+    @property
+    def key(self):
+        return (1,self.Id,self.Info.Version if self.Info else 0, self.ChangeType)
+    
 class Relation(Base):
     type="Relation"
     fields="Id Info Tags Members Quadtree ChangeType".split()
-
+    @property
+    def key(self):
+        return (2,self.Id,self.Info.Version if self.Info else 0, self.ChangeType)
 
 class Geometry(Base):
     type="Geometry"
@@ -59,7 +81,16 @@ class Geometry(Base):
         ans['properties'] = tgs
         ans['bbox'] = list(self.Bbox)
         ans['geometry'] = self.Geometry.toJson(asMerc)
+        if hasattr(self.Geometry, 'OriginalType'):
+            ot=self.Geometry.OriginalType
+            if ot in (0,1,2):
+                ans['origtype']=('N' if ot==0 else 'W' if ot==1 else 'R')
         return ans
+    @property
+    def key(self):
+        return (4,self.Id,self.Info.Version if self.Info else 0, self.ChangeType)
+
+sortedFeatures = lambda itr: sorted(itr, key=lambda o:o.key)
 
 #Tag = namedtuple("Tag","Key Value".split())
 #Member=namedtuple("Member","Type Ref Role".split())
@@ -97,27 +128,27 @@ mkpt=lambda pt, asm: (Mercator if asm else lambda x,y: [x,y])(pt.Lon*0.0000001,p
 
 class Point(Base):
     type='Point'
-    fields=['Ref','Lon','Lat']
+    fields=['Ref','Lon','Lat','OriginalType']
     def toJson(self,asmerc=False):
         return {'type':'Point', 'coordinates': mkpt(self,asmerc)}
         
 ptlist=lambda pp, asm: [mkpt(p,asm) for p in pp]
 class Linestring(Base):
     type='Linestring'
-    fields=['Points','ZOrder']
+    fields=['Points','ZOrder','OriginalType']
     def toJson(self,asmerc=False):
         return {'type':'Linestring', 'coordinates': ptlist(self.Points,asmerc), 'zorder':self.ZOrder}
     
     
 class Polygon(Base):
     type='Polygon'
-    fields=['Rings','ZOrder','Area']
+    fields=['Rings','ZOrder','Area','OriginalType']
     def toJson(self,asmerc=False):
         return {'type':'Polygon', 'coordinates': [ptlist(r,asmerc) for r in self.Rings], 'zorder':self.ZOrder, 'area': self.Area}
 
 class MultiGeometry(Base):
     type='MultiGeometry'
-    fields=['Geoms','ZOrder','Area']
+    fields=['Geoms','ZOrder','Area','OriginalType']
     def toJson(self,asmerc=False):
         return {'type':'MultiGeometry', 'geometries': [g.toJson(asmerc) for g in self.Geoms], 'zorder':self.ZOrder, 'area': self.Area}
     
@@ -501,7 +532,7 @@ def readGeom(rem,filt):
                 bx=boxToFloat(readGeoBbox(c))
                 if not intersects(filt,bx):
                     return None,None
-    
+    ot = None
     for a,b,c in rem:
         if a==10: gt=b
         elif a==11: zo=unzigzag(b)
@@ -509,6 +540,7 @@ def readGeom(rem,filt):
         elif a==13: pts.append(readPoint(c))
         elif a==14: lns.append(readLine(c))
         elif a==15: pls.append(readPolygon(c))
+        elif a==17: ot=b
     
     geo=None
     if gt==1 and len(pts)==1:
@@ -528,7 +560,7 @@ def readGeom(rem,filt):
         geo = MultiGeometry(gg, zo, ar)
     else:
         print "??? gt=%d, %d pts, %d lns, %d polys" % (gt,len(pts),len(lns),len(pls))
-    
+    geo.OriginalType = ot
     bx=geometryBox(geo)
     if filt:
         
